@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 import time
-
-from selenium.common import NoSuchElementException
 from selenium.webdriver.support import expected_conditions as ec  # 提供了一组预定义的条件，
 from selenium.webdriver.support.wait import WebDriverWait  # 上通常与WebDriverWait一起使用，用于等待某个特定条件成立后再继续执行代码
 from selenium import webdriver
@@ -16,7 +14,7 @@ class HDU:
     def __init__(self):
         options = webdriver.ChromeOptions()
         # 开启手机模式
-        options.add_experimental_option('mobileEmulation', {'deviceName': 'iPad'})  # 开启手机模式
+        options.add_experimental_option('mobileEmulation', {'deviceName': 'iPhone 6'})  # 开启手机模式
         # 驱动路径
         chrome_driver_path = r"C:\Users\yyy\.cache\selenium\chromedriver\win64\chromedriver-win64\chromedriver.exe"
 
