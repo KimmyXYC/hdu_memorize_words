@@ -16,7 +16,7 @@ class HDU:
     def __init__(self):
         options = webdriver.ChromeOptions()
         # 开启手机模式
-        options.add_experimental_option('mobileEmulation', {'deviceName': 'iPhone X'})  # 开启手机模式
+        options.add_experimental_option('mobileEmulation', {'deviceName': 'iPad'})  # 开启手机模式
         # 驱动路径
         chrome_driver_path = r"C:\Users\yyy\.cache\selenium\chromedriver\win64\chromedriver-win64\chromedriver.exe"
 

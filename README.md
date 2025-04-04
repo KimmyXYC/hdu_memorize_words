@@ -1,10 +1,13 @@
-# -
-杭电钉钉我爱记单词
+# 杭电钉钉我爱记单词
 
-准备好浏览器和与浏览器版本匹配的浏览器驱动（只能使用 Chrome ）  
-python打开后运行代码
+## 运行前须知 
+1. 安装python，下载 selenium==4.26.1 库
+2. 准备好浏览器和与浏览器版本匹配的浏览器驱动（目前只做了 Chrome ）
+谷歌浏览器及其驱动，这里是Version: 135.0.7049.42 (r1427262)的下载链接
+[https://storage.googleapis.com/chrome-for-testing-public/135.0.7049.42/win64/chrome-win64.zip]
+[https://storage.googleapis.com/chrome-for-testing-public/135.0.7049.42/win64/chromedriver-win64.zip]
+若chrome是其他版本，请下载对应驱动 ：[http://chromedriver.storage.googleapis.com/index.html]
 
-Chrome驱动下载：[http://chromedriver.storage.googleapis.com/index.html]
-
-data.json里按照示例格式填入你自己的学号密码
-点运行程序开始运行
+3. 把OpenWeb.py里面的C:\Program Files (x86)\Google\Chrome\Application\chromedriver.exe改成你下好的Chrome驱动路径
+4. data.json里按照示例格式填入你自己的学号密码
+5. 仅供学习参考使用
