@@ -39,7 +39,7 @@ class HDU:
                 data = json.load(f)
                 print(data)
                 # 缺一段新建用户的代码
-                inp = input("请输入你想登录的账号")
+                inp = input("请输入你想登录的账号（输入前面的序号）")
                 username = data[inp]["username"]
                 password = data[inp]["password"]
         else:
