@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """HDU英语自测自动化答题程序，使用Selenium实现浏览器自动化操作"""
-
-import time
-from selenium.webdriver.support import expected_conditions as ec  # 提供了一组预定义的条件，
-from selenium.webdriver.support.wait import WebDriverWait  # 上通常与WebDriverWait一起使用，用于等待某个特定条件成立后再继续执行代码
-from selenium import webdriver
-from selenium.webdriver.common.by import By  # 定位页面元素的方法
-from selenium.webdriver.chrome.service import Service
-import os
 import json
+import os
 import re
+import time
+
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By  # 定位页面元素的方法
+from selenium.webdriver.support import expected_conditions as ec  # 提供了一组预定义的条件
+from selenium.webdriver.support.wait import WebDriverWait  # 通常与WebDriverWait一起使用，用于等待某个特定条件成立后再继续执行代码
 
 
 class HDU:
