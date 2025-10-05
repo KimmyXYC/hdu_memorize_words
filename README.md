@@ -5,7 +5,7 @@
 - 使用 config.yaml 管理多用户账号，已彻底移除旧的 data.json 登录逻辑；当 config 未配置时回退到命令行交互输入。
 - 登录流程更健壮：自动尝试点击登录、处理新窗口/iframe、查找多种选择器并填入账号密码，必要时可手动完成登录。
 - 在做题流程中加入显式等待，减少页面切换导致的误判。
-- 一词多义支持：题库中可用“|”或“｜”分隔多个含义，例如 "tough": "艰苦的 | 恶棍"；出现任一含义的选项都会被识别为正确（题目保证不会同时出现两个含义）。
+- 一词多义支持：题库中可用“|”或“｜”分隔多个含义，例如 "tough": "艰苦的 | 恶棍"；若同时出现多个匹配选项，将优先选择题库中靠前的含义（上述示例则优先“艰苦的”）。
 
 仅供学习参考，请勿用于任何违反平台、学校或法律规定的用途。
 
@@ -18,9 +18,9 @@
 建议使用虚拟环境，然后安装依赖：
 
 - 方式一：requirements.txt（推荐）
-  - pip install -r requirements.txt
+  - `pip install -r requirements.txt`
 - 方式二：单独安装
-  - pip install selenium==4.26.1 loguru PyYAML
+  - `pip install selenium==4.26.1 loguru PyYAML`
 
 ## 浏览器与驱动准备
 1. 下载与你 Chrome 版本匹配的 ChromeDriver。
@@ -53,7 +53,7 @@
 ## 运行
 - 方式一：双击 run.cmd（Windows）
 - 方式二：命令行执行
-  - python main.py
+  - `python main.py`
 
 运行流程简述：
 1. 程序打开 https://skl.hduhelp.com/#/english/list 页面。
@@ -82,6 +82,7 @@
 
 在 config.yaml 中新增 ai 配置块：
 
+```
 ai:
   enable: false            # 是否启用AI；若未填写 base_url 或 model 则视为未启用
   base_url: "http://127.0.0.1:11434/v1"  # OpenAI兼容接口基础地址（如 Ollama、本地/私有部署、云端服务等）
@@ -90,6 +91,7 @@ ai:
   temperature: 0.2         # 采样温度（可选）
   timeout: 15              # 请求超时秒（可选）
   retries: 3               # 失败时额外重试次数（默认3），总尝试次数 = 1 + retries
+```
 
 说明与注意：
 - 需要一个“OpenAI 接口兼容”的服务端（标准路径：{base_url}/chat/completions）。

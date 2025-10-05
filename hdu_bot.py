@@ -348,7 +348,7 @@ class HDU:
         return question, options_list
 
     def find_answer(self, question_options: Tuple[str, List[str]]) -> int:
-        """在题库中查找答案，支持一词多义；未匹配则尝试 AI。"""
+        """在题库中查找答案，支持一词多义；若多个选项同时匹配，优先按照题库中含义的先后顺序进行选择；未匹配则尝试 AI。"""
         question, options_list = question_options
 
         def _normalize(s: str) -> str:
@@ -364,27 +364,42 @@ class HDU:
             save_error(question_options)
             return -1
 
-        # 构造可接受答案集合：支持字符串中使用“|/｜”分隔多个含义，或直接是列表
-        acceptable: set[str] = set()
+        # 构造“有序可接受含义列表”：支持字符串中使用“|/｜”分隔多个含义，或直接是列表
+        ordered: List[str] = []
         try:
             if isinstance(expected, list):
-                items = []
                 for item in expected:
                     if isinstance(item, str):
-                        items.extend(re.split(r"\s*[|｜]\s*", item))
-                acceptable = {seg.strip() for seg in items if str(seg).strip()}
+                        parts = re.split(r"\s*[|｜]\s*", item)
+                        for seg in parts:
+                            seg = str(seg).strip()
+                            if seg:
+                                ordered.append(seg)
             elif isinstance(expected, str):
-                acceptable = {seg.strip() for seg in re.split(r"\s*[|｜]\s*", expected) if seg.strip()}
+                for seg in re.split(r"\s*[|｜]\s*", expected):
+                    seg = str(seg).strip()
+                    if seg:
+                        ordered.append(seg)
             else:
-                acceptable = {str(expected).strip()}
+                ordered.append(str(expected).strip())
         except Exception:
-            acceptable = {str(expected).strip()}
+            ordered = [str(expected).strip()]
 
-        acceptable_norm = {_normalize(a) for a in acceptable}
+        # 去重但保留先后顺序（按规范化后的值去重）
+        seen_norm = set()
+        ordered_norm: List[str] = []
+        for seg in ordered:
+            norm = _normalize(seg)
+            if norm and norm not in seen_norm:
+                seen_norm.add(norm)
+                ordered_norm.append(norm)
 
-        for i, option in enumerate(options_list):
-            if _normalize(option) in acceptable_norm:
-                return i
+        # 依据“含义顺序优先”进行匹配：
+        # 先按含义顺序遍历，再在选项中寻找对应匹配，这样当多个选项同时命中时，优先题库里靠前的含义
+        for meaning_norm in ordered_norm:
+            for i, option in enumerate(options_list):
+                if _normalize(option) == meaning_norm:
+                    return i
 
         # 题库未匹配，尝试AI
         ai_idx = ai_choose_answer(question, options_list)
