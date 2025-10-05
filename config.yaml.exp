@@ -1,0 +1,20 @@
+# 登录配置
+# 支持多用户（users 列表）。可在程序启动时选择需要登录的账号。
+users:
+   - username: "2020123456"
+     password: "your_password"
+     addition: "备注（可选）"
+
+# 日志等级（可选：TRACE, DEBUG, INFO, SUCCESS, WARNING, ERROR, CRITICAL）
+log_level: "INFO"
+
+
+# AI 配置（可选）：当题库无法匹配时，调用 AI 判断答案
+ai:
+  enable: false            # 是否启用AI；若未填写base_url或model则自动视为未启用
+  base_url: "http://127.0.0.1:11434/v1"  # OpenAI兼容接口基础地址，示例为本地Ollama/或任意OpenAI兼容服务
+  token: ""               # 访问令牌（如无需鉴权可留空）
+  model: "gpt-4o-mini"    # 模型名称（依你的服务端而定，如 qwen2.5, glm-4-flash, deepseek-chat 等）
+  temperature: 0.2         # 采样温度（可选）
+  timeout: 15              # 请求超时时间秒（可选）
+  retries: 3               # 失败时额外重试次数（默认3），总尝试次数 = 1 + retries

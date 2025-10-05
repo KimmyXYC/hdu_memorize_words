@@ -1,2 +1,0 @@
-python OpenWeb.py
-pause
