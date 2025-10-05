@@ -328,6 +328,72 @@ class HDU:
 
         input("请手动开始考试后按回车继续")
 
+    def _normalize_text(self, s: str) -> str:
+        """规范化字符串用于匹配对比：移除所有空白并去除首尾空格。"""
+        try:
+            return re.sub(r"\s+", "", str(s)).strip()
+        except Exception:
+            return str(s).strip()
+
+    def _persist_ai_answer(self, question: str, chosen_value: str) -> None:
+        """将AI判定的结果写入题库 questions.json。
+        - 若题目不存在：新增条目 question: chosen_value
+        - 若题目已存在：在原有含义后追加（使用 " | " 分隔），避免重复（按规范化值去重）。
+        写入采用原子替换，尽量避免文件损坏。
+        """
+        try:
+            chosen_value = str(chosen_value).strip()
+            if not chosen_value:
+                return
+
+            existing = self.answer.get(question)
+            action = ""
+            if existing is None:
+                self.answer[question] = chosen_value
+                action = "新增"
+            else:
+                meanings: List[str] = []
+                if isinstance(existing, list):
+                    for item in existing:
+                        if isinstance(item, str):
+                            parts = re.split(r"\s*[|｜]\s*", item)
+                            for seg in parts:
+                                seg = str(seg).strip()
+                                if seg:
+                                    meanings.append(seg)
+                        else:
+                            meanings.append(str(item).strip())
+                elif isinstance(existing, str):
+                    for seg in re.split(r"\s*[|｜]\s*", existing):
+                        seg = str(seg).strip()
+                        if seg:
+                            meanings.append(seg)
+                else:
+                    meanings = [str(existing).strip()]
+
+                # 去重但保留顺序
+                seen = set()
+                dedup: List[str] = []
+                for seg in meanings:
+                    norm = self._normalize_text(seg)
+                    if norm and norm not in seen:
+                        seen.add(norm)
+                        dedup.append(seg)
+                if self._normalize_text(chosen_value) not in {self._normalize_text(x) for x in dedup}:
+                    dedup.append(chosen_value)
+                    action = "追加含义"
+                else:
+                    action = "已存在，无需更新"
+                self.answer[question] = " | ".join(dedup)
+
+            tmp_path = "questions.json.tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(self.answer, f, ensure_ascii=False, indent=2)
+            os.replace(tmp_path, "questions.json")
+            logger.success(f"{action}到题库：{question} -> {self.answer[question]}")
+        except Exception as e:
+            logger.warning(f"写入题库失败：{e}")
+
     def find_question(self) -> Tuple[str, List[str]]:
         """提取题目和选项"""
         # 提取题目文本（去除末尾标点）
@@ -360,6 +426,10 @@ class HDU:
             # 题库无此题，尝试AI判定
             ai_idx = ai_choose_answer(question, options_list)
             if ai_idx in (0, 1, 2, 3):
+                try:
+                    self._persist_ai_answer(question, options_list[ai_idx])
+                except Exception:
+                    pass
                 return ai_idx
             save_error(question_options)
             return -1
@@ -404,6 +474,10 @@ class HDU:
         # 题库未匹配，尝试AI
         ai_idx = ai_choose_answer(question, options_list)
         if ai_idx in (0, 1, 2, 3):
+            try:
+                self._persist_ai_answer(question, options_list[ai_idx])
+            except Exception:
+                pass
             return ai_idx
 
         # 未命中则记录
