@@ -76,7 +76,7 @@ class HDU:
     def login_web(self, username: str, password: str) -> None:
         """执行网页登录操作：先打开业务页触发重定向到 SSO，再自动填充登录。"""
         # 先打开业务页面，由其自动跳转到带 service/state 的 SSO 登录页
-        list_url = "https://skl.hduhelp.com/#/english/list"
+        list_url = "https://skl.hdu.edu.cn/#/english/list"
         try:
             self.driver.get(list_url)
         except Exception:
@@ -333,7 +333,7 @@ class HDU:
 
         # 不论是否自动点了登录，都导航到业务页面继续后续流程（若 SSO 已登录，将自动带票登录）
         try:
-            self.driver.get("https://skl.hduhelp.com/#/english/list")
+            self.driver.get("https://skl.hdu.edu.cn/#/english/list")
         except Exception:
             pass
 
