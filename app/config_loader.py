@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Configuration loading utilities for users and AI options."""
+"""Configuration loading utilities for users, AI options, and ChromeDriver path."""
 from __future__ import annotations
 import os
 import yaml
@@ -109,3 +109,31 @@ def load_ai_config() -> Dict[str, Any]:
         logger.warning(f"读取 AI 配置失败：{e}")
         result["enabled"] = False
     return result
+
+
+def load_chrome_driver_path() -> Optional[str]:
+    """Load ChromeDriver path from config.yaml (key: chrome_driver_path).
+
+    Returns normalized absolute path string if provided, else None.
+    """
+    try:
+        cfg_path = "config.yaml"
+        if not os.path.exists(cfg_path):
+            return None
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+        raw = cfg.get("chrome_driver_path")
+        if not raw:
+            return None
+        # Expand env vars and user home
+        path = os.path.expandvars(os.path.expanduser(str(raw)))
+        # Convert to absolute if relative
+        path = os.path.abspath(path)
+        if not os.path.exists(path):
+            logger.warning(f"配置的 chrome_driver_path 不存在：{path}，将尝试使用 Selenium Manager 或 PATH 中的 chromedriver。")
+            return path  # return anyway; caller may still try to use Selenium Manager when not exists
+        logger.info(f"使用配置的 ChromeDriver: {path}")
+        return path
+    except Exception as e:
+        logger.warning(f"读取 chrome_driver_path 失败：{e}")
+        return None

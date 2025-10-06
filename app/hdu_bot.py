@@ -15,9 +15,9 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.wait import WebDriverWait
 
-from config_loader import load_user_credentials
-from ai_client import ai_choose_answer
-from utils import save_error
+from .config_loader import load_user_credentials, load_chrome_driver_path
+from .ai_client import ai_choose_answer
+from .utils import save_error
 
 
 class HDU:
@@ -29,10 +29,21 @@ class HDU:
         # 移动端模拟配置
         options.add_experimental_option('mobileEmulation', {'deviceName': 'iPhone 6'})
 
-        # 浏览器驱动配置（如需修改 chromedriver 路径，请在此处调整）
-        chrome_driver_path = r"D:\Program Files\chrome-win64\chromedriver.exe"
-        service = Service(executable_path=chrome_driver_path)
-        self.driver = webdriver.Chrome(options=options, service=service)
+        # 浏览器驱动配置：优先使用 config.yaml 中的 chrome_driver_path；否则交给 Selenium Manager 或 PATH
+        driver_path = load_chrome_driver_path()
+        try:
+            if driver_path:
+                if os.path.exists(driver_path):
+                    service = Service(executable_path=driver_path)
+                    self.driver = webdriver.Chrome(options=options, service=service)
+                else:
+                    logger.warning(f"配置的 chrome_driver_path 路径不存在：{driver_path}，将尝试使用默认驱动（Selenium Manager 或 PATH）。")
+                    self.driver = webdriver.Chrome(options=options)
+            else:
+                self.driver = webdriver.Chrome(options=options)
+        except Exception as e:
+            logger.error(f"初始化 Chrome 驱动失败：{e}")
+            raise
         # 存储最近一次定位到的用户名/密码输入框，便于后续回车提交等兜底操作
         self._last_user_el = None
         self._last_pwd_el = None

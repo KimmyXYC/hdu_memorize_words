@@ -8,6 +8,8 @@ users:
 # 日志等级（可选：TRACE, DEBUG, INFO, SUCCESS, WARNING, ERROR, CRITICAL）
 log_level: "INFO"
 
+# ChromeDriver 路径（可选）：不配置则使用 Selenium Manager 或 PATH 中的 chromedriver
+chrome_driver_path: ""
 
 # AI 配置（可选）：当题库无法匹配时，调用 AI 判断答案
 ai:

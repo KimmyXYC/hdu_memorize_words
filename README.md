@@ -28,9 +28,10 @@
      - Chrome: https://storage.googleapis.com/chrome-for-testing-public/135.0.7049.42/win64/chrome-win64.zip
      - ChromeDriver: https://storage.googleapis.com/chrome-for-testing-public/135.0.7049.42/win64/chromedriver-win64.zip
    - 其他版本请从官方索引选择对应版本：https://chromedriver.storage.googleapis.com/index.html
-2. 在 `hdu_bot.py` 中配置你的 `chromedriver.exe` 路径（若需要修改示例路径）：
-   - 搜索 chrome_driver_path，修改为你的实际本地路径，例如：
-     - `D:\Program Files\chrome-win64\chromedriver.exe`
+2. 在 `config.yaml` 中配置 `chrome_driver_path`（可选）：
+   - 在根目录的 `config.yaml` 增加或修改 chrome_driver_path，例如：
+     - chrome_driver_path: "D:\\Program Files\\chrome-win64\\chromedriver.exe"
+   - 若不配置，将尝试使用 Selenium Manager 或 PATH 中的 chromedriver。
 
 ## 配置账号（多用户）
 1. 复制配置模板为实际配置文件：
@@ -55,8 +56,7 @@
 - 日志会写入 `run.log`，并同时输出到控制台。
 
 ## 运行
-- 方式一：双击 `run.cmd`（Windows）
-- 方式二：命令行执行
+- 命令行执行
   - `python main.py`
 
 运行流程简述：
@@ -71,7 +71,7 @@
 - ElementNotInteractableException：
   - 当前版本已加入更健壮的登录点击与 iframe 处理逻辑；若仍出现，请在浏览器中手动完成登录。
 - ChromeDriver 版本不匹配：
-  - 请确保 Chrome 与 ChromeDriver 版本相匹配，并在 `hdu_bot.py` 中正确填写 `chromedriver.exe` 路径。
+  - 请确保 Chrome 与 ChromeDriver 版本相匹配，并在 `config.yaml` 中通过 chrome_driver_path 指定 `chromedriver.exe` 路径（或将 chromedriver 加入 PATH）。
 - 日志位置：
   - `run.log`（同目录），可通过 `config.yaml` 的 log_level 调整日志详尽程度。
 
@@ -107,3 +107,17 @@ ai:
 - 当题库未命中且启用 AI 时，若 AI 返回了可解析的选项，脚本会自动将该题目与所选含义写入 `questions.json`。
 - 若题目已存在但不包含该含义，将以“ | ”分隔符追加，形成一词多义；重复含义会自动去重，不会重复写入。
 - 当同一题目出现多个匹配含义时，仍然优先选择题库中靠前的含义（与一词多义的优先规则一致）。
+
+
+## 项目结构
+- app/: 模块化核心代码
+  - hdu_bot.py: 浏览器自动化与答题逻辑
+  - ai_client.py: AI 判题客户端（OpenAI 兼容）
+  - config_loader.py: 配置读取（多用户、AI、chrome_driver_path）
+  - logging_config.py: 日志初始化（写入 run.log）
+  - utils.py: 工具函数
+- main.py: 程序入口
+- config.yaml / config.yaml.exp: 配置文件与模板
+- questions.json: 题库
+- error.txt: 未匹配题目记录
+- run.log: 运行日志

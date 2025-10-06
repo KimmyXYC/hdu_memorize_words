@@ -6,7 +6,7 @@ import time
 import requests
 from typing import List, Optional, Dict, Any
 from loguru import logger
-from config_loader import load_ai_config
+from .config_loader import load_ai_config
 
 
 def ai_choose_answer(question: str, options_list: List[str], cfg: Optional[Dict[str, Any]] = None) -> int:

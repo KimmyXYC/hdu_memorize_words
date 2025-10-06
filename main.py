@@ -9,8 +9,8 @@
 - 日志初始化在 logging_config.init_logger_from_config 中完成，写入 run.log。
 """
 from __future__ import annotations
-from logging_config import init_logger_from_config
-from hdu_bot import HDU
+from app.logging_config import init_logger_from_config
+from app.hdu_bot import HDU
 
 
 def main() -> None:
