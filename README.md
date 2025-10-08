@@ -103,6 +103,7 @@
 - 新题目会与现有题库合并（不覆盖）
 
 ### 注意事项
+- 使用 Tampermonkey 脚本时，**必须搭配插件 [User-Agent Switcher and Manager](https://chromewebstore.google.com/detail/user-agent-switcher-and-m/bhchdcejhohfmigjafbampogmaanbfkg)**，否则在考试模式下无法正常答题。
 - 题库和配置数据存储在浏览器本地，建议定期导出备份
 - 清除浏览器数据会导致题库和配置丢失
 - AI 配置不会导出，需要在每个浏览器中单独配置
