@@ -3,8 +3,10 @@
 from __future__ import annotations
 import json
 import os
+import random
 import re
 import time
+import threading
 from typing import Tuple, List
 
 from loguru import logger
@@ -61,15 +63,51 @@ class HDU:
         except Exception as e:
             logger.error(f"加载题库时发生未知错误: {e}")
             self.answer = {}
+        
+        # 计时器相关状态
+        self.answer_time_seconds = 300  # 默认300秒，将从配置加载
+        self.expected_score = 100  # 默认100分（全对），将从配置加载
+        self.timer_expired = False  # 计时器是否已到期
+        self.answering_completed = False  # 答题是否完成
+        self.timer_lock = threading.Lock()  # 线程锁保护状态
+        self.wrong_question_indices = set()  # 需要故意答错的题目索引集合
+
+    def _start_timer(self):
+        """启动答题计时器（从按下回车开始计时）"""
+        def timer_thread():
+            logger.info(f"计时器已启动，将在 {self.answer_time_seconds} 秒后自动提交")
+            for remaining in range(self.answer_time_seconds, 0, -1):
+                time.sleep(1)
+                # 每30秒或最后10秒提示一次
+                if remaining % 30 == 0 or remaining <= 10:
+                    logger.info(f"剩余时间: {remaining} 秒")
+            
+            # 时间到
+            with self.timer_lock:
+                self.timer_expired = True
+                if self.answering_completed:
+                    logger.info("时间到且答题已完成，准备提交...")
+                else:
+                    logger.warning("时间到但答题未完成，将在答题完成后立即提交")
+        
+        timer = threading.Thread(target=timer_thread, daemon=True)
+        timer.start()
 
     def login(self):
-        """处理用户登录凭证：优先 config.yaml（多用户），否则命令行输入。"""
-        username, password = load_user_credentials()
+        """处理用户登录凭证：优先 config.yaml（多用户），否则在网页端完成手动登录。"""
+        username, password, answer_time_seconds, expected_score = load_user_credentials()
+        self.answer_time_seconds = answer_time_seconds  # 存储答题时间配置
+        self.expected_score = expected_score  # 存储期望分数配置
         if username and password:
             logger.info("使用 config.yaml 中的登录信息")
+            logger.info(f"答题时间设置为 {self.answer_time_seconds} 秒")
+            logger.info(f"期望分数设置为 {self.expected_score} 分")
         else:
-            username = input(" 请输入用户名：")
-            password = input(" 请输入密码：")
+            logger.info("未配置账号密码，将在网页端完成手动登录")
+            logger.info(f"答题时间设置为 {self.answer_time_seconds} 秒（默认）")
+            logger.info(f"期望分数设置为 {self.expected_score} 分（默认）")
+            username = None
+            password = None
 
         self.login_web(username, password)
 
@@ -112,6 +150,19 @@ class HDU:
         except Exception:
             # 如果不存在该入口，忽略
             pass
+
+        # 如果账号密码为空，则让用户在网页端手动登录
+        if username is None or password is None:
+            logger.info("请在浏览器中手动完成登录")
+            input("登录完成后，请按回车继续...")
+            # 导航到业务页面
+            try:
+                self.driver.get("https://skl.hdu.edu.cn/#/english/list")
+            except Exception:
+                pass
+            input("请手动开始考试后按回车继续")
+            self._start_timer()  # 从摁下回车开始计时
+            return
 
         def _find_interactable(selectors, timeout: int = 15):
             """在当前文档内查找可见可交互的元素，支持多选择器，直到超时。"""
@@ -338,6 +389,7 @@ class HDU:
             pass
 
         input("请手动开始考试后按回车继续")
+        self._start_timer()  # 从摁下回车开始计时
 
     def _normalize_text(self, s: str) -> str:
         """规范化字符串用于匹配对比：移除所有空白并去除首尾空格。"""
@@ -495,6 +547,23 @@ class HDU:
         save_error(question_options)
         return -1
 
+    def get_wrong_answer(self, correct_index: int) -> int:
+        """获取一个错误答案的索引（随机选择除了正确答案外的其他选项）。
+        
+        Args:
+            correct_index: 正确答案的索引（0-3），如果为-1表示没有找到答案，直接返回随机选项
+        
+        Returns:
+            错误答案的索引（0-3）
+        """
+        if correct_index == -1:
+            # 如果没有找到正确答案，返回随机选项
+            return random.randint(0, 3)
+        
+        # 从0-3中排除正确答案，随机选择一个错误答案
+        wrong_options = [i for i in range(4) if i != correct_index]
+        return random.choice(wrong_options)
+
     def click_answer(self, index: int) -> None:
         """点击答案选项，-1时点击下一题。"""
         if index == -1:
@@ -508,16 +577,28 @@ class HDU:
             options[index].click()
 
     def wait(self):
-        """执行交卷前的等待和提交操作"""
+        """执行交卷前的等待和提交操作（基于计时器）"""
         logger.info("答题完成，准备提交...")
         logger.info("错误题目已保存至 error.txt")
 
-        # 倒计时
-        for i in range(300, -1, -1):
-            logger.opt(raw=True).info(f"\r剩余时间: {i} 秒，时间到后将自动提交")
-            time.sleep(1)
-        logger.opt(raw=True).info("\n")
-
+        # 检查计时器状态
+        with self.timer_lock:
+            if self.timer_expired:
+                # 时间已到，立即提交
+                logger.info("计时时间已到，立即提交")
+            else:
+                # 时间未到，等待计时器到期
+                logger.info("答题已完成，等待计时器到期后提交...")
+        
+        # 等待计时器到期（如果还没到期的话）
+        while True:
+            with self.timer_lock:
+                if self.timer_expired:
+                    break
+            time.sleep(0.5)
+        
+        logger.info("开始提交...")
+        
         # 交卷
         try:
             submit_btn = self.driver.find_element(By.CLASS_NAME, "van-nav-bar__right")
@@ -533,9 +614,32 @@ class HDU:
     def start(self):
         """主控制流程"""
         self.login()
+        
+        # 根据期望分数计算需要做错的题目数量
+        wrong_count = 100 - self.expected_score
+        if wrong_count < 0:
+            wrong_count = 0
+        elif wrong_count > 100:
+            wrong_count = 100
+        
+        # 随机选择需要做错的题目索引
+        if wrong_count > 0:
+            self.wrong_question_indices = set(random.sample(range(100), wrong_count))
+            logger.info(f"期望分数: {self.expected_score} 分，将随机做错 {wrong_count} 题")
+        else:
+            self.wrong_question_indices = set()
+            logger.info(f"期望分数: {self.expected_score} 分，将全部答对")
+        
         for i in range(100):
             question_options = self.find_question()
             answer_index = self.find_answer(question_options)
+            
+            # 如果当前题目需要故意做错
+            if i in self.wrong_question_indices:
+                wrong_index = self.get_wrong_answer(answer_index)
+                logger.info(f"第 {i+1} 题故意答错：正确答案 {chr(answer_index + 65) if answer_index != -1 else '未知'}，选择 {chr(wrong_index + 65)}")
+                answer_index = wrong_index
+            
             prev_question = question_options[0]
             self.click_answer(answer_index)
             # 显式等待下一题加载完成（等待题干发生变化）
@@ -545,6 +649,11 @@ class HDU:
                 )
             except Exception as e:
                 logger.warning(f"等待下一题加载失败或超时：{e}")
+        
+        # 标记答题完成
+        with self.timer_lock:
+            self.answering_completed = True
+        
         self.wait()
         input("最后按回车结束代码")
         self.driver.quit()

@@ -7,15 +7,17 @@ from typing import Tuple, Optional, Dict, Any
 from loguru import logger
 
 
-def load_user_credentials() -> Tuple[Optional[str], Optional[str]]:
-    """Load username/password from config.yaml (multi-user supported).
+def load_user_credentials() -> Tuple[Optional[str], Optional[str], int, int]:
+    """Load username/password/answer_time_seconds/expected_score from config.yaml (multi-user supported).
 
-    Returns (username, password) or (None, None) if not configured properly.
+    Returns (username, password, answer_time_seconds, expected_score) or (None, None, 300, 100) if not configured properly.
+    Default answer_time_seconds is 300 (5 minutes).
+    Default expected_score is 100 (answer all questions correctly).
     """
     cfg_path = "config.yaml"
     if not os.path.exists(cfg_path):
         logger.debug("未找到 config.yaml，跳过配置读取。")
-        return None, None
+        return None, None, 300, 100
     try:
         with open(cfg_path, "r", encoding="utf-8") as f:
             cfg = yaml.safe_load(f) or {}
@@ -29,14 +31,32 @@ def load_user_credentials() -> Tuple[Optional[str], Optional[str]]:
                 uname = str(u.get("username", "")).strip()
                 pwd = str(u.get("password", "")).strip()
                 addition = str(u.get("addition", "")).strip()
+                # Read answer_time_seconds with default 300 (5 minutes)
+                answer_time = u.get("answer_time_seconds", 300)
+                try:
+                    answer_time = int(answer_time)
+                    if answer_time <= 0:
+                        answer_time = 300
+                except (ValueError, TypeError):
+                    answer_time = 300
+                # Read expected_score with default 100 (all correct)
+                expected_score = u.get("expected_score", 100)
+                try:
+                    expected_score = int(expected_score)
+                    if expected_score < 0:
+                        expected_score = 0
+                    elif expected_score > 100:
+                        expected_score = 100
+                except (ValueError, TypeError):
+                    expected_score = 100
                 if uname and pwd:
-                    valid_users.append({"idx": idx, "username": uname, "password": pwd, "addition": addition})
+                    valid_users.append({"idx": idx, "username": uname, "password": pwd, "addition": addition, "answer_time_seconds": answer_time, "expected_score": expected_score})
             if valid_users:
                 if len(valid_users) == 1:
                     u = valid_users[0]
                     add = f" ({u['addition']})" if u['addition'] else ""
                     logger.info(f"使用 config.yaml 中的账号: {u['username']}{add}")
-                    return u["username"], u["password"]
+                    return u["username"], u["password"], u["answer_time_seconds"], u["expected_score"]
                 else:
                     logger.info("检测到 config.yaml 中存在多个账号：")
                     for u in valid_users:
@@ -47,17 +67,17 @@ def load_user_credentials() -> Tuple[Optional[str], Optional[str]]:
                         choice_idx = int(choice)
                         for u in valid_users:
                             if u["idx"] == choice_idx:
-                                return u["username"], u["password"]
+                                return u["username"], u["password"], u["answer_time_seconds"], u["expected_score"]
                         logger.error("选择的序号不存在。")
                     except Exception:
                         logger.error("输入无效，未能选择账号。")
-                    return None, None
+                    return None, None, 300, 100
 
         logger.debug("config.yaml 未提供有效的 users 列表，将回退到命令行输入。")
-        return None, None
+        return None, None, 300, 100
     except Exception as e:
         logger.error(f"读取 config.yaml 失败：{e}")
-        return None, None
+        return None, None, 300, 100
 
 
 def load_ai_config() -> Dict[str, Any]:
