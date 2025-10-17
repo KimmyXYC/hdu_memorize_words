@@ -160,8 +160,6 @@ class HDU:
                 self.driver.get("https://skl.hdu.edu.cn/#/english/list")
             except Exception:
                 pass
-            input("请手动开始考试后按回车继续")
-            self._start_timer()  # 从摁下回车开始计时
             return
 
         def _find_interactable(selectors, timeout: int = 15):
@@ -387,9 +385,6 @@ class HDU:
             self.driver.get("https://skl.hdu.edu.cn/#/english/list")
         except Exception:
             pass
-
-        input("请手动开始考试后按回车继续")
-        self._start_timer()  # 从摁下回车开始计时
 
     def find_question(self) -> Tuple[str, List[str]]:
         """提取题目和选项"""

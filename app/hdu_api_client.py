@@ -7,7 +7,6 @@ import random
 import re
 import secrets
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
@@ -460,7 +459,8 @@ def api_mode_answer(username: str, password: str, expected_score: int,
 
     for idx, q_data in enumerate(questions):
         paper_detail_id = q_data.get('paperDetailId')
-        title = q_data.get('title', '').strip().rstrip('.')
+        title = q_data.get('title', '').strip().rstrip('.').rstrip()
+
         options = [
             q_data.get('answerA', '').strip().rstrip('.'),
             q_data.get('answerB', '').strip().rstrip('.'),
@@ -468,12 +468,20 @@ def api_mode_answer(username: str, password: str, expected_score: int,
             q_data.get('answerD', '').strip().rstrip('.')
         ]
 
+        logger.info(title)
+        logger.debug(f"A: {options[0]}")
+        logger.debug(f"B: {options[1]}")
+        logger.debug(f"C: {options[2]}")
+        logger.debug(f"D: {options[3]}")
+
+
         # Use QuestionProcessor to get the answer index
         correct_answer_idx = question_processor.get_answer_index(title, options)
 
         correct_answer_char = 'A' # Default to 'A' if no answer found
         if correct_answer_idx != -1:
             correct_answer_char = chr(correct_answer_idx + 65)
+            logger.info(f"找到答案: {correct_answer_char}")
         else:
             logger.warning(f"题目 '{title}' 未找到答案，默认选择 A")
 
@@ -487,7 +495,7 @@ def api_mode_answer(username: str, password: str, expected_score: int,
 
         final_answers.append({
             "paperDetailId": paper_detail_id,
-            "answer": final_answer_char
+            "input": final_answer_char
         })
 
     # 5. Wait for the specified answer time
