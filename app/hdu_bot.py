@@ -700,6 +700,10 @@ class HDU:
 
         # 主答题循环
         question_options = None
+        answered_questions = set()  # 用于跟踪已回答的题目
+        same_question_count = 0  # 记录连续遇到相同题目的次数
+        last_question = None
+
         try:
             while True:
                 # 查找题目
@@ -709,6 +713,23 @@ class HDU:
                     break
 
                 question, options_list = question_options
+                question_key = f"{question}|{'|'.join(options_list)}"
+
+                # 检测是否是重复的题目（已经回答过）
+                if question_key == last_question:
+                    same_question_count += 1
+                    if same_question_count >= 3:
+                        # 连续3次遇到相同题目，说明已经答完所有题
+                        logger.info("检测到已完成所有题目（最后一题已作答）")
+                        break
+                else:
+                    same_question_count = 0
+                    last_question = question_key
+
+                # 如果这道题已经回答过，检查是否可以提交
+                if question_key in answered_questions:
+                    logger.info("检测到重复题目，可能已完成所有题目")
+                    break
 
                 # 查找答案
                 answer_index = self.find_answer(question_options)
@@ -721,6 +742,9 @@ class HDU:
                 # 点击答案
                 logger.info(f"选择答案: {chr(answer_index + 65)}")
                 self.click_answer(answer_index)
+
+                # 标记该题目已回答
+                answered_questions.add(question_key)
 
                 # 人为延迟，避免操作过快
                 time.sleep(1)
