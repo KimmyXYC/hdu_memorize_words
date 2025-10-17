@@ -17,56 +17,58 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as ec
 from selenium.webdriver.support.wait import WebDriverWait
 
-from .config_loader import load_user_credentials, load_chrome_driver_path
-from .ai_client import ai_choose_answer
+from .config_loader import load_user_credentials, load_chrome_driver_path, load_ai_config
 from .utils import save_error
+from .question_processor import QuestionProcessor
 
 
 class HDU:
     """自动化答题主类，封装核心操作逻辑"""
 
     def __init__(self):
-        """初始化浏览器驱动并加载题库"""
-        options = webdriver.ChromeOptions()
-        # 移动端模拟配置
-        options.add_experimental_option('mobileEmulation', {'deviceName': 'iPhone 6'})
-
-        # 浏览器驱动配置：优先使用 config.yaml 中的 chrome_driver_path；否则交给 Selenium Manager 或 PATH
-        driver_path = load_chrome_driver_path()
-        try:
-            if driver_path:
-                if os.path.exists(driver_path):
-                    service = Service(executable_path=driver_path)
-                    self.driver = webdriver.Chrome(options=options, service=service)
-                else:
-                    logger.warning(f"配置的 chrome_driver_path 路径不存在：{driver_path}，将尝试使用默认驱动（Selenium Manager 或 PATH）。")
-                    self.driver = webdriver.Chrome(options=options)
-            else:
-                self.driver = webdriver.Chrome(options=options)
-        except Exception as e:
-            logger.error(f"初始化 Chrome 驱动失败：{e}")
-            raise
-        # 存储最近一次定位到的用户名/密码输入框，便于后续回车提交等兜底操作
+        """初始化配置和资源（浏览器驱动将根据模式按需初始化）"""
+        # 先加载用户配置获取模式
+        username, password, answer_time_seconds, expected_score, mode = load_user_credentials()
+        
+        self.mode = mode  # 存储模式
+        self.username = username
+        self.password = password
+        self.answer_time_seconds = answer_time_seconds
+        self.expected_score = expected_score
+        self.driver = None  # 浏览器驱动（仅在 browser 模式下初始化）
         self._last_user_el = None
         self._last_pwd_el = None
 
-        # 题库加载处理
-        try:
-            with open("questions.json", 'r', encoding='utf-8') as file:
-                self.answer = json.load(file)
-        except FileNotFoundError:
-            logger.error("文件 questions.json 未找到。")
-            self.answer = {}
-        except json.JSONDecodeError:
-            logger.error("文件 questions.json 不是有效的 JSON 格式。")
-            self.answer = {}
-        except Exception as e:
-            logger.error(f"加载题库时发生未知错误: {e}")
-            self.answer = {}
-        
-        # 计时器相关状态
-        self.answer_time_seconds = 300  # 默认300秒，将从配置加载
-        self.expected_score = 100  # 默认100分（全对），将从配置加载
+        # 初始化 QuestionProcessor
+        ai_cfg = load_ai_config()
+        self.question_processor = QuestionProcessor(ai_cfg)
+
+        # 根据模式初始化浏览器（仅 browser 模式需要）
+        if self.mode == "browser":
+            logger.info("使用浏览器模拟模式")
+            options = webdriver.ChromeOptions()
+            # 移动端模拟配置
+            options.add_experimental_option('mobileEmulation', {'deviceName': 'iPhone 6'})
+
+            # 浏览器驱动配置：优先使用 config.yaml 中的 chrome_driver_path；否则交给 Selenium Manager 或 PATH
+            driver_path = load_chrome_driver_path()
+            try:
+                if driver_path:
+                    if os.path.exists(driver_path):
+                        service = Service(executable_path=driver_path)
+                        self.driver = webdriver.Chrome(options=options, service=service)
+                    else:
+                        logger.warning(f"配置的 chrome_driver_path 路径不存在：{driver_path}，将尝试使用默认驱动（Selenium Manager 或 PATH）。")
+                        self.driver = webdriver.Chrome(options=options)
+                else:
+                    self.driver = webdriver.Chrome(options=options)
+            except Exception as e:
+                logger.error(f"初始化 Chrome 驱动失败：{e}")
+                raise
+        else:
+            logger.info("使用 API 模式")
+
+        # 计时器相关状态（仅用于 browser 模式）
         self.timer_expired = False  # 计时器是否已到期
         self.answering_completed = False  # 答题是否完成
         self.timer_lock = threading.Lock()  # 线程锁保护状态
@@ -94,11 +96,11 @@ class HDU:
         timer.start()
 
     def login(self):
-        """处理用户登录凭证：优先 config.yaml（多用户），否则在网页端完成手动登录。"""
-        username, password, answer_time_seconds, expected_score = load_user_credentials()
-        self.answer_time_seconds = answer_time_seconds  # 存储答题时间配置
-        self.expected_score = expected_score  # 存储期望分数配置
-        if username and password:
+        """处理用户登录凭证：优先 config.yaml（多用户），否则在网页端完成手动登录。
+        
+        注意：此方法仅用于 browser 模式。API 模式不调用此方法。
+        """
+        if self.username and self.password:
             logger.info("使用 config.yaml 中的登录信息")
             logger.info(f"答题时间设置为 {self.answer_time_seconds} 秒")
             logger.info(f"期望分数设置为 {self.expected_score} 分")
@@ -106,10 +108,8 @@ class HDU:
             logger.info("未配置账号密码，将在网页端完成手动登录")
             logger.info(f"答题时间设置为 {self.answer_time_seconds} 秒（默认）")
             logger.info(f"期望分数设置为 {self.expected_score} 分（默认）")
-            username = None
-            password = None
 
-        self.login_web(username, password)
+        self.login_web(self.username, self.password)
 
     def login_web(self, username: str, password: str) -> None:
         """执行网页登录操作：先打开业务页触发重定向到 SSO，再自动填充登录。"""
@@ -391,72 +391,6 @@ class HDU:
         input("请手动开始考试后按回车继续")
         self._start_timer()  # 从摁下回车开始计时
 
-    def _normalize_text(self, s: str) -> str:
-        """规范化字符串用于匹配对比：移除所有空白并去除首尾空格。"""
-        try:
-            return re.sub(r"\s+", "", str(s)).strip()
-        except Exception:
-            return str(s).strip()
-
-    def _persist_ai_answer(self, question: str, chosen_value: str) -> None:
-        """将AI判定的结果写入题库 questions.json。
-        - 若题目不存在：新增条目 question: chosen_value
-        - 若题目已存在：在原有含义后追加（使用 " | " 分隔），避免重复（按规范化值去重）。
-        写入采用原子替换，尽量避免文件损坏。
-        """
-        try:
-            chosen_value = str(chosen_value).strip()
-            if not chosen_value:
-                return
-
-            existing = self.answer.get(question)
-            action = ""
-            if existing is None:
-                self.answer[question] = chosen_value
-                action = "新增"
-            else:
-                meanings: List[str] = []
-                if isinstance(existing, list):
-                    for item in existing:
-                        if isinstance(item, str):
-                            parts = re.split(r"\s*[|｜]\s*", item)
-                            for seg in parts:
-                                seg = str(seg).strip()
-                                if seg:
-                                    meanings.append(seg)
-                        else:
-                            meanings.append(str(item).strip())
-                elif isinstance(existing, str):
-                    for seg in re.split(r"\s*[|｜]\s*", existing):
-                        seg = str(seg).strip()
-                        if seg:
-                            meanings.append(seg)
-                else:
-                    meanings = [str(existing).strip()]
-
-                # 去重但保留顺序
-                seen = set()
-                dedup: List[str] = []
-                for seg in meanings:
-                    norm = self._normalize_text(seg)
-                    if norm and norm not in seen:
-                        seen.add(norm)
-                        dedup.append(seg)
-                if self._normalize_text(chosen_value) not in {self._normalize_text(x) for x in dedup}:
-                    dedup.append(chosen_value)
-                    action = "追加含义"
-                else:
-                    action = "已存在，无需更新"
-                self.answer[question] = " | ".join(dedup)
-
-            tmp_path = "questions.json.tmp"
-            with open(tmp_path, "w", encoding="utf-8") as f:
-                json.dump(self.answer, f, ensure_ascii=False, indent=2)
-            os.replace(tmp_path, "questions.json")
-            logger.success(f"{action}到题库：{question} -> {self.answer[question]}")
-        except Exception as e:
-            logger.warning(f"写入题库失败：{e}")
-
     def find_question(self) -> Tuple[str, List[str]]:
         """提取题目和选项"""
         # 提取题目文本（去除末尾标点）
@@ -479,73 +413,7 @@ class HDU:
     def find_answer(self, question_options: Tuple[str, List[str]]) -> int:
         """在题库中查找答案，支持一词多义；若多个选项同时匹配，优先按照题库中含义的先后顺序进行选择；未匹配则尝试 AI。"""
         question, options_list = question_options
-
-        def _normalize(s: str) -> str:
-            # 去除所有空白符，首尾空格，并保持最小侵入式的比较
-            return re.sub(r"\s+", "", str(s)).strip()
-
-        expected = self.answer.get(question, None)
-        if expected is None:
-            # 题库无此题，尝试AI判定
-            ai_idx = ai_choose_answer(question, options_list)
-            if ai_idx in (0, 1, 2, 3):
-                try:
-                    self._persist_ai_answer(question, options_list[ai_idx])
-                except Exception:
-                    pass
-                return ai_idx
-            save_error(question_options)
-            return -1
-
-        # 构造“有序可接受含义列表”：支持字符串中使用“|/｜”分隔多个含义，或直接是列表
-        ordered: List[str] = []
-        try:
-            if isinstance(expected, list):
-                for item in expected:
-                    if isinstance(item, str):
-                        parts = re.split(r"\s*[|｜]\s*", item)
-                        for seg in parts:
-                            seg = str(seg).strip()
-                            if seg:
-                                ordered.append(seg)
-            elif isinstance(expected, str):
-                for seg in re.split(r"\s*[|｜]\s*", expected):
-                    seg = str(seg).strip()
-                    if seg:
-                        ordered.append(seg)
-            else:
-                ordered.append(str(expected).strip())
-        except Exception:
-            ordered = [str(expected).strip()]
-
-        # 去重但保留先后顺序（按规范化后的值去重）
-        seen_norm = set()
-        ordered_norm: List[str] = []
-        for seg in ordered:
-            norm = _normalize(seg)
-            if norm and norm not in seen_norm:
-                seen_norm.add(norm)
-                ordered_norm.append(norm)
-
-        # 依据“含义顺序优先”进行匹配：
-        # 先按含义顺序遍历，再在选项中寻找对应匹配，这样当多个选项同时命中时，优先题库里靠前的含义
-        for meaning_norm in ordered_norm:
-            for i, option in enumerate(options_list):
-                if _normalize(option) == meaning_norm:
-                    return i
-
-        # 题库未匹配，尝试AI
-        ai_idx = ai_choose_answer(question, options_list)
-        if ai_idx in (0, 1, 2, 3):
-            try:
-                self._persist_ai_answer(question, options_list[ai_idx])
-            except Exception:
-                pass
-            return ai_idx
-
-        # 未命中则记录
-        save_error(question_options)
-        return -1
+        return self.question_processor.get_answer_index(question, options_list)
 
     def get_wrong_answer(self, correct_index: int) -> int:
         """获取一个错误答案的索引（随机选择除了正确答案外的其他选项）。
@@ -612,48 +480,259 @@ class HDU:
             logger.error(f"提交失败，请手动操作！错误信息：{str(e)}")
 
     def start(self):
-        """主控制流程"""
-        self.login()
+        """主控制流程 - 根据模式选择浏览器模拟或API模式"""
+        if self.mode == "api":
+            # API 模式
+            self._start_api_mode()
+        else:
+            # 浏览器模式
+            self._start_browser_mode()
+    
+    def _start_api_mode(self):
+        """API 模式的主控制流程"""
+        logger.info("=" * 50)
+        logger.info("启动 API 模式")
+        logger.info("=" * 50)
         
-        # 根据期望分数计算需要做错的题目数量
+        x_auth_token = None
+
+        # 尝试 API 登录（需要密码）
+        if self.username and self.password:
+            logger.info(f"用户名: {self.username}")
+            logger.info(f"答题时间: {self.answer_time_seconds} 秒")
+            logger.info(f"期望分数: {self.expected_score} 分")
+
+            # 如果密码已配置，直接使用 api_mode_answer 函数
+            # 该函数会提示用户选择考试模式或自测模式
+            from .hdu_api_client import api_mode_answer
+
+            success = api_mode_answer(
+                self.username,
+                self.password,
+                self.expected_score,
+                self.answer_time_seconds,
+                self.question_processor,  # 传递 QuestionProcessor 实例
+                exam_type=None  # None 表示提示用户输入
+            )
+
+            if success:
+                logger.success("API 模式答题完成！")
+            else:
+                logger.error("API 模式答题失败")
+            return
+
+        # 未配置密码，回退到浏览器登录获取 token
+        logger.warning("未配置密码，将回退到浏览器登录")
+        logger.info("=" * 50)
+        logger.info("回退到浏览器登录模式")
+        logger.info("=" * 50)
+
+        # 初始化浏览器驱动
+        self._init_browser_driver()
+
+        # 执行浏览器登录
+        logger.info("开始浏览器登录...")
+        self.login_web(self.username, self.password)
+
+        # 从浏览器提取 X-Auth-Token
+        logger.info("尝试从浏览器会话中提取 X-Auth-Token...")
+        from .hdu_api_client import extract_token_from_browser, HDUApiClient
+        x_auth_token = extract_token_from_browser(self.driver)
+
+        if not x_auth_token:
+            logger.error("无法从浏览器提取 X-Auth-Token，任务失败")
+            if self.driver:
+                self.driver.quit()
+            return
+
+        logger.success("成功从浏览器提取 X-Auth-Token")
+
+        # 关闭浏览器
+        logger.info("关闭浏览器...")
+        if self.driver:
+            self.driver.quit()
+            self.driver = None
+
+        logger.info("切换回 API 模式完成任务...")
+
+        # 提示用户选择模式
+        logger.info("=" * 50)
+        logger.info("请选择模式:")
+        logger.info("0 - 自测模式 (Self-test)")
+        logger.info("1 - 考试模式 (Exam)")
+        logger.info("=" * 50)
+
+        exam_type = None
+        while True:
+            choice = input("请输入 0 或 1: ").strip()
+            if choice in ['0', '1']:
+                exam_type = choice
+                mode_name = "自测模式" if choice == '0' else "考试模式"
+                logger.info(f"已选择: {mode_name}")
+                break
+            else:
+                logger.warning("无效输入，请输入 0 或 1")
+
+        # 使用获取的 token 完成答题任务
+        api_client = HDUApiClient(x_auth_token)
+
+        # 获取当前周次
+        week = api_client.fetch_current_week()
+        if not week:
+            logger.error("获取当前周次失败")
+            return
+
+        # 获取新试卷
+        logger.info(f"Getting paper with type={exam_type} (0=自测, 1=考试)...")
+        paper_data = api_client.get_new_paper(week, exam_type=exam_type)
+        if not paper_data:
+            logger.error("获取试卷失败")
+            return
+
+        paper_id = paper_data.get('paperId')
+        questions = paper_data.get('list', [])
+
+        if not paper_id or not questions:
+            logger.error("试卷数据无效")
+            return
+
+        logger.info(f"开始处理 {len(questions)} 道题目...")
+
+        # 答题逻辑
+        start_time = time.time()
+        final_answers = []
+
+        # 计算需要答错的题目数量
         wrong_count = 100 - self.expected_score
         if wrong_count < 0:
             wrong_count = 0
-        elif wrong_count > 100:
-            wrong_count = 100
-        
-        # 随机选择需要做错的题目索引
+        elif wrong_count > len(questions):
+            wrong_count = len(questions)
+
+        # 随机选择需要答错的题目索引
+        wrong_indices = set()
         if wrong_count > 0:
-            self.wrong_question_indices = set(random.sample(range(100), wrong_count))
+            wrong_indices = set(random.sample(range(len(questions)), wrong_count))
             logger.info(f"期望分数: {self.expected_score} 分，将随机做错 {wrong_count} 题")
+
+        # 重新加载题库以确保最新
+        self.question_processor.reload_question_bank()
+
+        for idx, question in enumerate(questions):
+            paper_detail_id = question.get('paperDetailId')
+            title = question.get('title', '').strip().rstrip('.')
+            option_a = question.get('answerA', '').strip().rstrip('.')
+            option_b = question.get('answerB', '').strip().rstrip('.')
+            option_c = question.get('answerC', '').strip().rstrip('.')
+            option_d = question.get('answerD', '').strip().rstrip('.')
+
+            options = [option_a, option_b, option_c, option_d]
+
+            # 使用 QuestionProcessor 获取答案
+            correct_answer_idx = self.question_processor.get_answer_index(title, options)
+
+            correct_answer = None
+            if correct_answer_idx != -1:
+                correct_answer = chr(correct_answer_idx + 65)
+
+            # 如果仍未找到答案，默认选 A
+            if not correct_answer:
+                correct_answer = 'A'
+                logger.warning(f"题目 '{title}' 未找到答案，默认选择 A")
+
+            # 确定最终答案（是否需要故意答错）
+            final_answer_char = correct_answer
+            if idx in wrong_indices:
+                # 获取一个错误答案
+                wrong_options = [chr(i + 65) for i in range(4) if chr(i + 65) != correct_answer]
+                if wrong_options:
+                    final_answer_char = random.choice(wrong_options)
+                    logger.info(f"故意做错第 {idx + 1} 题，选择 {final_answer_char} 而不是 {correct_answer}")
+
+            final_answers.append({
+                "paperDetailId": paper_detail_id,
+                "answer": final_answer_char
+            })
+
+        # 检查答题用时
+        elapsed_time = time.time() - start_time
+        remaining_time = self.answer_time_seconds - elapsed_time
+        if remaining_time > 0:
+            logger.info(f"等待 {remaining_time:.1f} 秒以满足答题时间要求...")
+            time.sleep(remaining_time)
+
+        # 提交答案
+        logger.info("提交答案...")
+        if api_client.submit_paper(paper_id, final_answers):
+            logger.success("API 模式答题成功！")
         else:
-            self.wrong_question_indices = set()
-            logger.info(f"期望分数: {self.expected_score} 分，将全部答对")
-        
-        for i in range(100):
-            question_options = self.find_question()
-            answer_index = self.find_answer(question_options)
-            
-            # 如果当前题目需要故意做错
-            if i in self.wrong_question_indices:
-                wrong_index = self.get_wrong_answer(answer_index)
-                logger.info(f"第 {i+1} 题故意答错：正确答案 {chr(answer_index + 65) if answer_index != -1 else '未知'}，选择 {chr(wrong_index + 65)}")
-                answer_index = wrong_index
-            
-            prev_question = question_options[0]
-            self.click_answer(answer_index)
-            # 显式等待下一题加载完成（等待题干发生变化）
+            logger.error("API 模式答题失败。")
+
+    def _init_browser_driver(self):
+        """Initializes the browser driver if it's not already initialized."""
+        if self.driver is None:
+            logger.info("Initializing browser driver for token extraction...")
+            options = webdriver.ChromeOptions()
+            options.add_experimental_option('mobileEmulation', {'deviceName': 'iPhone 6'})
+            driver_path = load_chrome_driver_path()
             try:
-                WebDriverWait(self.driver, 10).until(
-                    lambda d: d.find_element(By.CLASS_NAME, "van-col--17").find_elements(By.TAG_NAME, "span")[1].text.strip()[:-2] != prev_question
-                )
+                if driver_path and os.path.exists(driver_path):
+                    service = Service(executable_path=driver_path)
+                    self.driver = webdriver.Chrome(options=options, service=service)
+                else:
+                    self.driver = webdriver.Chrome(options=options)
             except Exception as e:
-                logger.warning(f"等待下一题加载失败或超时：{e}")
-        
-        # 标记答题完成
-        with self.timer_lock:
-            self.answering_completed = True
-        
+                logger.error(f"Failed to initialize Chrome driver: {e}")
+                raise
+
+    def _start_browser_mode(self):
+        """浏览器模式的主控制流程"""
+        logger.info("=" * 50)
+        logger.info("启动浏览器模式")
+        logger.info("=" * 50)
+
+        # 初始化浏览器驱动
+        self._init_browser_driver()
+
+        # 执行登录
+        logger.info("开始登录...")
+        self.login_web(self.username, self.password)
+
+        logger.info("登录成功，准备答题...")
+
+        input("请手动开始考试后按回车继续")
+        self._start_timer()  # 从摁下回车开始计时
+
+        # 主答题循环
+        question_options = None
+        try:
+            while True:
+                # 查找题目
+                question_options = self.find_question()
+                if not question_options:
+                    logger.warning("未能提取到题目，可能是已答题完毕或页面结构变化")
+                    break
+
+                question, options_list = question_options
+
+                # 查找答案
+                answer_index = self.find_answer(question_options)
+
+                if answer_index == -1:
+                    logger.warning(f"未能找到题目 '{question}' 的答案")
+                    # 随机选择一个选项
+                    answer_index = random.randint(0, 3)
+
+                # 点击答案
+                logger.info(f"选择答案: {chr(answer_index + 65)}")
+                self.click_answer(answer_index)
+
+                # 人为延迟，避免操作过快
+                time.sleep(1)
+        except Exception as e:
+            logger.error(f"答题过程中发生错误：{e}")
+            if question_options:
+                save_error(question_options)
+
+        # 等待交卷
         self.wait()
-        input("最后按回车结束代码")
-        self.driver.quit()

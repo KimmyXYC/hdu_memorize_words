@@ -7,17 +7,18 @@ from typing import Tuple, Optional, Dict, Any
 from loguru import logger
 
 
-def load_user_credentials() -> Tuple[Optional[str], Optional[str], int, int]:
-    """Load username/password/answer_time_seconds/expected_score from config.yaml (multi-user supported).
+def load_user_credentials() -> Tuple[Optional[str], Optional[str], int, int, str]:
+    """Load username/password/answer_time_seconds/expected_score/mode from config.yaml (multi-user supported).
 
-    Returns (username, password, answer_time_seconds, expected_score) or (None, None, 300, 100) if not configured properly.
+    Returns (username, password, answer_time_seconds, expected_score, mode) or (None, None, 300, 100, "browser") if not configured properly.
     Default answer_time_seconds is 300 (5 minutes).
     Default expected_score is 100 (answer all questions correctly).
+    Default mode is "browser" (browser simulation).
     """
     cfg_path = "config.yaml"
     if not os.path.exists(cfg_path):
         logger.debug("未找到 config.yaml，跳过配置读取。")
-        return None, None, 300, 100
+        return None, None, 300, 100, "browser"
     try:
         with open(cfg_path, "r", encoding="utf-8") as f:
             cfg = yaml.safe_load(f) or {}
@@ -49,14 +50,19 @@ def load_user_credentials() -> Tuple[Optional[str], Optional[str], int, int]:
                         expected_score = 100
                 except (ValueError, TypeError):
                     expected_score = 100
+                # Read mode with default "browser"
+                mode = str(u.get("mode", "browser")).strip().lower()
+                if mode not in ["browser", "api"]:
+                    mode = "browser"
                 if uname and pwd:
-                    valid_users.append({"idx": idx, "username": uname, "password": pwd, "addition": addition, "answer_time_seconds": answer_time, "expected_score": expected_score})
+                    valid_users.append({"idx": idx, "username": uname, "password": pwd, "addition": addition, "answer_time_seconds": answer_time, "expected_score": expected_score, "mode": mode})
             if valid_users:
                 if len(valid_users) == 1:
                     u = valid_users[0]
                     add = f" ({u['addition']})" if u['addition'] else ""
                     logger.info(f"使用 config.yaml 中的账号: {u['username']}{add}")
-                    return u["username"], u["password"], u["answer_time_seconds"], u["expected_score"]
+                    logger.info(f"模式: {u['mode']}")
+                    return u["username"], u["password"], u["answer_time_seconds"], u["expected_score"], u["mode"]
                 else:
                     logger.info("检测到 config.yaml 中存在多个账号：")
                     for u in valid_users:
@@ -67,17 +73,18 @@ def load_user_credentials() -> Tuple[Optional[str], Optional[str], int, int]:
                         choice_idx = int(choice)
                         for u in valid_users:
                             if u["idx"] == choice_idx:
-                                return u["username"], u["password"], u["answer_time_seconds"], u["expected_score"]
+                                logger.info(f"模式: {u['mode']}")
+                                return u["username"], u["password"], u["answer_time_seconds"], u["expected_score"], u["mode"]
                         logger.error("选择的序号不存在。")
                     except Exception:
                         logger.error("输入无效，未能选择账号。")
-                    return None, None, 300, 100
+                    return None, None, 300, 100, "browser"
 
         logger.debug("config.yaml 未提供有效的 users 列表，将回退到命令行输入。")
-        return None, None, 300, 100
+        return None, None, 300, 100, "browser"
     except Exception as e:
         logger.error(f"读取 config.yaml 失败：{e}")
-        return None, None, 300, 100
+        return None, None, 300, 100, "browser"
 
 
 def load_ai_config() -> Dict[str, Any]:

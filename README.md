@@ -113,18 +113,54 @@
 
 ## 🖥️ 方式二：Python Selenium 脚本
 
+### 特点
+Python 脚本支持 **两种运行模式**：
+
+#### 1. 浏览器模拟模式 (browser)
+- ✅ 完全模拟真实浏览器操作
+- ✅ 可视化答题过程
+- ✅ 适合调试和观察答题流程
+- ⚠️ 需要安装 Chrome 浏览器和 ChromeDriver
+- ⚠️ 速度相对较慢
+
+#### 2. API 接口模式 (api)
+- ✅ 直接调用 HDU 后端 API（速度更快）
+- ✅ 无需持续打开浏览器（在大多数情况下一次 API 登录成功即可）
+- ✅ 支持期望分数控制（随机答错指定数量的题目）
+- ✅ 支持答题时间控制（等待指定时间后提交）
+- ✅ 自动使用本地题库和 AI 辅助
+- ⚠️ API 模式需要在 `config.yaml` 中配置用户名和密码以直接使用 API 登录
+- 💡 若未配置密码或 API 登录失败，将**自动回退到浏览器登录**：
+  - 程序会打开浏览器让你完成登录（支持自动填充或手动登录）
+  - 登录完成后程序会尝试从浏览器会话中提取 `X-Auth-Token`
+  - 成功提取到 token 后会关闭浏览器并继续用 API 完成后续答题流程
+  - 若无法提取 token，任务将终止并提示错误
+
+> 说明（关于考试/自测模式选择）
+> - 在 API 模式下，程序会要求你通过命令行输入选择答题模式：
+>   - 输入 `0` → 自测模式（Self-test）
+>   - 输入 `1` → 考试模式（Exam）
+> - 如果 `exam_type` 在调用时未显式传入，程序会在运行中提示输入。请注意：0 表示“自测”，1 表示“考试”。
+
 ### 环境要求
 - Windows（当前脚本和说明以 Windows 为例）
 - Python 3.8+（建议）
-- Chrome 浏览器与匹配版本的 ChromeDriver
+- **浏览器模式额外需要**: Chrome 浏览器与匹配版本的 ChromeDriver
 
 ### 安装依赖
 建议使用虚拟环境，然后安装依赖：
 
-- 方式一：requirements.txt（推荐）
-  - `pip install -r requirements.txt`
-- 方式二：单独安装
-  - `pip install selenium==4.26.1 loguru PyYAML`
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+或单独安装：
+
+```bash
+pip install selenium==4.26.1 loguru PyYAML pycryptodome requests
+```
 
 ### 浏览器与驱动准备
 1. 下载与你 Chrome 版本匹配的 ChromeDriver。
@@ -142,12 +178,14 @@
    - 将 `config.yaml.exp` 复制为 `config.yaml`
 2. 按如下格式在 `config.yaml` 中填写多个账号（至少一个）：
 
-```
+```yaml
    users:
      - username: "2020123456"
        password: "your_password"
        addition: "备注（可选）"
+       mode: "browser"  # 模式选择："browser" (浏览器模拟) 或 "api" (API接口)，默认为 "browser"
        answer_time_seconds: 300  # 答题时间（秒），默认300秒（5分钟）
+       expected_score: 100  # 期望分数（0-100），默认100（全对）。例如设置为97，则随机做错3题
 ```
 
 3. 可选：配置日志等级（默认 INFO），可选值：TRACE, DEBUG, INFO, SUCCESS, WARNING, ERROR, CRITICAL
@@ -159,18 +197,45 @@
 说明：
 - 程序启动时会优先读取 `config.yaml`。若存在多个账号，会在控制台提示你选择；若未配置 users，则会在网页端完成手动登录。
 - 日志会写入 `run.log`，并同时输出到控制台。
-- `answer_time_seconds` 用于设置答题时间（秒），从按下回车开始计时。若计时结束且答题完成，则提交；若计时结束但答题未完成，则答题完成后立即提交。可按用户单独配置，默认为 300 秒（5 分钟）。
+- `mode` 参数决定使用哪种模式：`browser`（浏览器模拟）或 `api`（API接口），可按用户单独配置，默认为 `browser`。
+- `answer_time_seconds` 用于设置答题时间（秒）。可按用户单独配置，默认为 300 秒（5 分钟）。
+- `expected_score` 用于设置期望分数（0-100），程序会随机答错相应数量的题目。默认为 100（全对）。
+
+> 补充说明（与 API 模式相关）:
+> - 当 `mode: "api"` 且 `username/password` 在 `config.yaml` 中配置时：程序会直接尝试 API 登录并在登录成功后提示选择 `0`（自测）或 `1`（考试）；
+> - 当 `mode: "api"` 但未配置密码，或 API 登录失败时：程序会回退到浏览器登录以获取 token（按上面回退说明），完成后继续 API 答题流程；
 
 ### 运行
-- 命令行执行
-  - `python main.py`
+- 命令行执行：
+
+```bash
+python main.py
+```
 
 运行流程简述：
-1. 程序打开 https://skl.hdu.edu.cn/#/english/list 页面。
-2. 自动尝试点击“登录”，并在当前页面或可能的弹出窗口/iframe 中查找用户名和密码输入框进行填充；若无法自动定位，请手动完成登录。
-3. 控制台提示“请手动开始考试后按回车继续”，此时请在网页上自行开始自测/考试，然后回到控制台按回车。
-4. **从按下回车的那一刻开始计时**，脚本会自动进行后续答题过程（题库来源为项目内 `questions.json`）。
-5. 提交逻辑：
+1. 程序读取 `config.yaml`（若存在多个用户，会提示选择账号）。
+2. 若所选账号 `mode` 为 `browser`，按浏览器模拟流程运行；若为 `api`，按 API 流程运行（见下）。
+
+API 模式（当 `mode: "api"`）：
+- 若在 `config.yaml` 中配置了 `username` 与 `password`：程序将尝试用 API 登录；登录成功后会在命令行提示你选择答题模式（0 = 自测，1 = 考试）。
+- 若未配置 `password` 或 API 登录失败：程序会打开浏览器并引导你完成登录，登录后会尝试从浏览器会话中提取 `X-Auth-Token`，提取成功后立即关闭浏览器并切换回 API 完成答题。
+
+浏览器模式（当 `mode: "browser"`）：
+- 程序会打开浏览器并尝试自动填充/提交登录；若无法自动完成，将提示你手动登录。
+- 登录并在页面手动开始考试/自测后，回到控制台按回车开始计时与答题。
+
+### 命令行交互示例（API 模式）
+- 启动后若进入 API 流程并需要选择模式，你会看到类似提示：
+```
+请选择模式:
+0 - 自测模式 (Self-test)
+1 - 考试模式 (Exam)
+请输入 0 或 1: 
+```
+- 输入 `0` 表示自测，输入 `1` 表示考试。
+
+### 提交与计时逻辑
+- 提交逻辑：
    - 若计时结束且答题已完成，则立即提交。
    - 若计时结束但答题未完成，则等待答题完成后立即提交。
    - 若答题完成但计时未结束，则等待计时结束后提交。
@@ -221,13 +286,15 @@ ai:
 
 ## 项目结构
 - app/: 模块化核心代码
-  - hdu_bot.py: 浏览器自动化与答题逻辑
+  - hdu_bot.py: 浏览器自动化与答题逻辑（支持 browser 和 api 两种模式）
+  - hdu_api_client.py: API 模式客户端（登录、获取试卷、提交答案）**【新增】**
   - ai_client.py: AI 判题客户端（OpenAI 兼容）
-  - config_loader.py: 配置读取（多用户、AI、chrome_driver_path）
+  - config_loader.py: 配置读取（多用户、AI、chrome_driver_path、模式选择）
   - logging_config.py: 日志初始化（写入 run.log）
-  - utils.py: 工具函数
+  - utils.py: 工具函数（含 skl-ticket 生成）
 - main.py: 程序入口
 - config.yaml / config.yaml.exp: 配置文件与模板
 - questions.json: 题库
 - error.txt: 未匹配题目记录
 - run.log: 运行日志
+- requirements.txt: Python 依赖包列表

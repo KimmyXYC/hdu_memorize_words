@@ -4,6 +4,7 @@ users:
    - username: "2020123456"
      password: "your_password"
      addition: "备注（可选）"
+     mode: "browser"  # 模式选择："browser" (浏览器模拟) 或 "api" (API接口)，默认为 "browser"
      answer_time_seconds: 300  # 答题时间（秒），默认300秒（5分钟）
      expected_score: 100  # 期望分数（0-100），默认100（全对）。例如设置为97，则随机做错3题
 
