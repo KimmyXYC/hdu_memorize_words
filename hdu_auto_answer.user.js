@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         HDU英语自测自动答题助手
 // @namespace    https://github.com/KimmyXYC/hdu_memorize_words
-// @version      1.0.0
+// @version      1.1.0
 // @description  HDU英语自测自动答题，支持本地题库和AI辅助答题
 // @author       Kimmy
 // @license    	 MIT
@@ -98,23 +98,21 @@
     // 从页面提取题目和选项
     function extractQuestion() {
         try {
-            // 提取题目
-            const questionContainer = document.querySelector('.van-col--17');
-            if (!questionContainer) return null;
+            // 提取题目（新版结构：.q-title）
+            const questionEl = document.querySelector('.q-title');
+            if (!questionEl) return null;
 
-            const spans = questionContainer.querySelectorAll('span');
-            if (spans.length < 2) return null;
+            // 去除末尾的 " . " 或 "."（新版HTML题目末尾带有 " . "）
+            const question = questionEl.textContent.trim().replace(/\s*\.\s*$/, '');
+            if (!question) return null;
 
-            const questionText = spans[1].textContent.trim();
-            const question = questionText.slice(0, -2); // 去除末尾标点
-
-            // 提取选项
-            const optionElements = document.querySelectorAll('.van-cell__title');
+            // 提取选项（新版结构：.option-item 下的 .option-text）
+            const optionElements = document.querySelectorAll('.option-item .option-text');
             if (optionElements.length < 4) return null;
 
             const options = Array.from(optionElements).slice(0, 4).map(el => {
-                const text = el.textContent.trim();
-                return text.substring(3).replace(/\s./g, ''); // 去除序号和多余字符
+                // 去除末尾的 " . " 或 "."
+                return el.textContent.trim().replace(/\s*\.\s*$/, '');
             });
 
             return { question, options };
@@ -260,7 +258,8 @@ D. ${options[3]}
     // 点击答案
     function clickAnswer(index) {
         try {
-            const options = document.querySelectorAll('.van-cell__title');
+            // 新版结构：点击 .option-item 元素
+            const options = document.querySelectorAll('.option-item');
             if (options.length < 4) {
                 console.error('[HDU助手] 未找到足够的选项元素');
                 return false;
